@@ -14,7 +14,7 @@ Every lab here is **self-verifying**: it ships a `verify.sh` that CI runs on eac
 | [`labs/`](labs/) | Atomic labs (1–3 h, one concept each) with an architecture diagram and a `verify.sh` |
 | [`projects/`](projects/) | Integrating projects that combine several technologies |
 | [`architecture/`](architecture/) | Architecture Decision Records (ADRs) and written designs |
-| [`cheatsheets/`](cheatsheets/) | Condensed notes per technology |
+| [`cheatsheets/`](cheatsheets/) | Condensed notes per technology — [Docker](cheatsheets/docker.md) |
 | [`journal/`](journal/) | Short session log, one file per day |
 | [`templates/`](templates/) | Lab and ADR templates |
 | [`scripts/`](scripts/) | Repo utilities |
