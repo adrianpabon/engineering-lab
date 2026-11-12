@@ -1,0 +1,70 @@
+# Single, generic workflow: finds labs touched by a push/PR and runs each lab's verify.sh.
+# Manual runs (workflow_dispatch) verify every lab in the repo.
+name: verify-labs
+
+on:
+  push:
+    branches: [main]
+    paths: ["labs/**"]
+  pull_request:
+    paths: ["labs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-labs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      labs: ${{ steps.find.outputs.labs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find labs to verify
+        id: find
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # A lab is any labs/<tech>/<NN-slug>/ directory that contains verify.sh.
+          if [[ "$EVENT" == "workflow_dispatch" ]] \
+             || [[ -z "$BASE_SHA" ]] \
+             || [[ "$BASE_SHA" =~ ^0+$ ]] \
+             || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            candidates=$(find labs -mindepth 3 -maxdepth 3 -name verify.sh -printf '%h\n')
+          else
+            candidates=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- labs \
+              | awk -F/ 'NF>=3 {print $1"/"$2"/"$3}')
+          fi
+          labs=$(printf '%s\n' $candidates | sort -u \
+            | while read -r d; do if [[ -n "$d" && -f "$d/verify.sh" ]]; then echo "$d"; fi; done \
+            | jq -R . | jq -cs .)
+          echo "Labs to verify: $labs"
+          echo "labs=$labs" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: detect
+    if: needs.detect.outputs.labs != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lab: ${{ fromJson(needs.detect.outputs.labs) }}
+    name: verify ${{ matrix.lab }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run verify.sh
+        working-directory: ${{ matrix.lab }}
+        run: |
+          chmod +x verify.sh
+          ./verify.sh
