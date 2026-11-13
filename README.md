@@ -26,6 +26,7 @@ Tracks: **Docker · Kubernetes · Terraform · AWS · AI**
 | # | Lab | Tech | Level | Status |
 |---|---|---|---|---|
 | 01 | [Dockerfile basics](labs/docker/01-dockerfile-basics/) | Docker | beginner | ✅ done |
+| 02 | [Multi-stage, non-root & base images](labs/docker/02-multi-stage-non-root/) | Docker | intermediate | ✅ done |
 
 ## How it works
 

@@ -75,6 +75,28 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 Removes build-time tooling from the final image. It does **not** shrink the runtime base — for that, change the base image.
 
+## Non-root & base images (lab 02)
+
+```dockerfile
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home app   # Debian
+RUN addgroup -S -g 10001 app && adduser -S -u 10001 -G app -H app                                       # Alpine (BusyBox)
+COPY --chown=app:app app/ ./app/    # files owned by the app user
+USER 10001                          # everything after this (and the container) runs unprivileged
+```
+
+| Command | What it does |
+|---|---|
+| `docker build -f Dockerfile.alpine -t lab02:alpine .` | `-f` = use a Dockerfile with another name. |
+| `docker top <c> -o pid,uid,comm` | Processes in the container with their **real UID** (0 = root). `pid` column is mandatory. |
+| `docker image inspect <img> --format '{{.Config.User}}'` | User configured in the image (empty = root). |
+| `docker image inspect <img> --format '{{.Size}}'` | Image size in bytes. |
+
+| Base | Size (lab 02, compressed) | Pros | Cons |
+|---|---|---|---|
+| `python:3.13-slim` | 48.5 MB | glibc, most compatible, has shell | biggest |
+| `python:3.13-alpine` | 22.7 MB | smallest | musl libc: wheel/compat surprises |
+| `distroless/python3-debian13:nonroot` | 27.8 MB | no shell/pkg manager, non-root by default, fewer CVEs | hard to debug; Python version fixed by image |
+
 ## Cleanup
 
 | Command | What it does |
