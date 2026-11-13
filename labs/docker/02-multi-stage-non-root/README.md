@@ -6,7 +6,7 @@ level: intermediate
 status: done
 date: 2026-11-12
 last_reviewed: 2026-11-12
-time_spent_h: 0.7
+time_spent_h: 1.5
 ---
 
 # Multi-stage, non-root and base images
@@ -74,9 +74,49 @@ Three Dockerfiles for the same app (Python 3.13 everywhere for a fair comparison
 - **Distroless is the most secure**: no shell, no package manager, no `pip`. `docker exec <c> sh` fails with `exec: "sh": executable file not found` — an attacker who gets in has nothing to work with, and image scanners report fewer CVEs. Trade-off: harder debugging (use the `:debug` tag, `docker debug`, or Kubernetes ephemeral containers).
 - **Non-root is one line (`USER`) and verifiable from the host**: `docker top` shows the real UID of the container process. Fixed numeric UIDs (10001) map cleanly to Kubernetes `runAsUser` / `runAsNonRoot`.
 
+## Deep dive: inspecting the stages by hand
+
+Follow-up study session (same day), run manually step by step to see what multi-stage, non-root and distroless actually change.
+
+```bash
+docker build --target builder -f Dockerfile.distroless -t demo:builder .   # stop at the builder stage
+docker build -f Dockerfile.distroless -t demo:final .                      # full build (final stage)
+docker images demo
+
+docker run --rm --entrypoint pip demo:builder --version                    # pip exists?
+docker run --rm --entrypoint pip demo:final --version
+
+docker run --rm demo:builder id                                            # which user?
+docker run --rm demo:final -c "import os; print(os.getuid())"              # no `id` in distroless → ask Python
+
+docker run --rm demo:builder sh -c "echo hacked > /etc/hacked && echo WRITTEN"   # write to a system folder?
+docker run --rm demo:final -c "open('/etc/hacked','w')"
+
+docker run --rm -it --entrypoint sh demo:final                             # shell?
+docker run --rm demo:final -c "import os; print(os.listdir('/bin'))"       # what's inside /bin?
+docker run --rm demo:builder ls /bin | wc -l
+
+docker run --rm -it --entrypoint sh gcr.io/distroless/python3-debian13:debug-nonroot   # debug variant
+```
+
+| Check | builder stage (`python:3.13-slim`) | final image (distroless) |
+|---|---|---|
+| Size (compressed) | 52 MB | 27.8 MB |
+| `pip` | present | `executable file not found` |
+| User | `uid=0(root)` | `65532` (nonroot) |
+| Write to `/etc` | `WRITTEN` | `PermissionError: [Errno 13]` |
+| Shell (`sh`) | present | `executable file not found` |
+| Commands in `/bin` | 259 | 13 (`python3` + a few glibc helpers) |
+
+Takeaways:
+- **"Build with tools, ship without them."** The builder can run as root and carry pip/apt because it is never deployed.
+- Non-root + no shell means an attacker who exploits the app can't install packages, modify system files, or open a shell — a much smaller attack surface.
+- For troubleshooting, the `:debug-nonroot` variant adds a BusyBox shell and **keeps the non-root user** (`whoami` → `nonroot`, prompt `$`). Never ship it to production.
+
 ## Interview questions this answers
 
 - *What is a multi-stage build and when does it actually reduce image size?* — Multiple `FROM`s; copy only artifacts into the final stage. Big win for compiled languages (Java, Go) or native deps; small for pure-Python apps.
 - *Alpine vs distroless vs slim?* — Alpine minimizes size (musl caveats); distroless minimizes attack surface with glibc compatibility; slim is the most compatible and debuggable.
 - *Why shouldn't containers run as root, and how do you enforce it?* — Limits blast radius of a container escape or RCE. `USER <uid>` in the Dockerfile, verify with `docker top`, enforce with `runAsNonRoot` in Kubernetes.
 - *How do you debug a distroless container with no shell?* — `:debug` image variant, `docker debug`, or `kubectl debug` with an ephemeral container.
+- *If the builder stage runs as root, is that a problem?* — No: it's discarded after the build. Only the final stage ships, and that one runs as non-root.

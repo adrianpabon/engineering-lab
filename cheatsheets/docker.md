@@ -90,6 +90,15 @@ USER 10001                          # everything after this (and the container) 
 | `docker top <c> -o pid,uid,comm` | Processes in the container with their **real UID** (0 = root). `pid` column is mandatory. |
 | `docker image inspect <img> --format '{{.Config.User}}'` | User configured in the image (empty = root). |
 | `docker image inspect <img> --format '{{.Size}}'` | Image size in bytes. |
+| `docker build --target builder -t demo:builder .` | Build **only up to** a named stage — inspect what multi-stage throws away. |
+| `docker run --rm --entrypoint pip demo:final --version` | `--entrypoint` = replace the image's entrypoint (run another program). |
+| `docker run --rm -it --entrypoint sh <img>` | `-it` = interactive terminal → open a shell (fails on distroless: no `sh`). |
+| `docker run --rm <distroless-img> -c "import os; print(os.getuid())"` | No shell/`id` in distroless → ask Python (its entrypoint is `python3`). |
+| `docker run --rm -it --entrypoint sh gcr.io/distroless/python3-debian13:debug-nonroot` | Distroless **debug** variant: BusyBox shell, still non-root. Troubleshooting only. |
+
+**Reading a `docker run` command:** `docker run [docker options] IMAGE [command / args for the container]` — everything **before** the image configures Docker (`--rm`, `-d`, `-it`, `--name`, `-p`, `--entrypoint`); everything **after** goes to the container.
+
+Shell prompt hint: `$` = normal user, `#` = root.
 
 | Base | Size (lab 02, compressed) | Pros | Cons |
 |---|---|---|---|
